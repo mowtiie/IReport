@@ -16,7 +16,7 @@ Notes from step 3: the dashboard counts cover all tickets, not the filtered list
 
 Notes from step 2: "Nearby" means the resident's home barangay, taken as the barangay of most of their own tickets (falls back to the first barangay), because `users` has no barangay column. Report Issue also requires a title and both barangay and street. Sample media are vector drawables `sample_*` in `res/drawable`, kept from shrinking by `res/raw/keep.xml`. Notification rows and nearby tickets do not open from the feed; notifications open Ticket Detail.
 
-Notes from step 1: the theme style is `AppTheme` (set in the manifest). A fourth seeded account, `neighbor@demo.com` (Maria Santos, resident, password `demo1234`), owns the other-resident tickets so Community Feed is not empty. Seed media names (`sample_pothole`, `sample_trash`, `sample_streetlight`, `sample_after_road`, `sample_after_trash`) have no drawables yet.
+Notes from step 1: the theme style is `Theme.IReport` (set in the manifest). A fourth seeded account, `neighbor@demo.com` (Maria Santos, resident, password `demo1234`), owns the other-resident tickets so Community Feed is not empty. Seed media names (`sample_pothole`, `sample_trash`, `sample_streetlight`, `sample_after_road`, `sample_after_trash`) have no drawables yet.
 
 ## Prime directive: build the fastest way possible
 
