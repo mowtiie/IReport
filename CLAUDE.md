@@ -16,7 +16,7 @@ Notes from step 3: the dashboard counts cover all tickets, not the filtered list
 
 Notes from step 2: "Nearby" means the resident's home barangay, taken as the barangay of most of their own tickets (falls back to the first barangay), because `users` has no barangay column. Report Issue also requires a title and both barangay and street. Sample media are vector drawables `sample_*` in `res/drawable`, kept from shrinking by `res/raw/keep.xml`. Notification rows and nearby tickets do not open from the feed; notifications open Ticket Detail.
 
-Notes from step 1: the theme style is `Theme.IReport` (set in the manifest). A fourth seeded account, `neighbor@demo.com` (Maria Santos, resident, password `demo1234`), owns the other-resident tickets so Community Feed is not empty. Seed media names (`sample_pothole`, `sample_trash`, `sample_streetlight`, `sample_after_road`, `sample_after_trash`) have no drawables yet.
+Notes from step 1: the theme style is `Theme.IReport` (set in the manifest). A fourth seeded account, `neighbor@demo.com` (Maria Santos, resident, password `demo1234`), owns the other-resident tickets so Community Feed is not empty. Seed media names (`sample_*`) are vector drawables in `res/drawable`, kept from shrinking by `res/raw/keep.xml`; real uploads are files in `filesDir/media`.
 
 ## Prime directive: build the fastest way possible
 
@@ -49,7 +49,7 @@ Build in this order. The core flow must work end to end before anything is polis
 - Database: pure SQLite (`SQLiteOpenHelper`, `ContentValues`, `Cursor`). No Room, no ORM, no DAO layer.
 - Dropdowns: `TextInputLayout` (ExposedDropdownMenu style) with `MaterialAutoCompleteTextView`. Never `Spinner`.
 - Messages: `Snackbar` for validation and errors on a screen that stays open. `Toast` only for simulated notifications and messages shown as a screen closes. `MaterialAlertDialogBuilder` (never plain `AlertDialog.Builder`) for dialogs, `BottomSheetDialog` for add/edit sheets.
-- Media: no camera or storage permissions. "Photo/video upload" is simulated: a button opens a `MaterialAlertDialogBuilder` list of bundled sample images/clips (drawables in `res/drawable`), and the chosen resource name is stored as text in the row.
+- Media: no camera or storage permissions. "Photo/video upload" uses the system Photo Picker (`ActivityResultContracts.PickVisualMedia` with a `PickVisualMediaRequest`, built by `Data.imageRequest()` and `Data.imageAndVideoRequest()`). The picked file is copied into `filesDir/media` by `Data.saveMedia` (photos are downscaled and rotated to match their EXIF orientation, videos are copied as is), and only the file name is stored as text in the row. Show it with `Data.showMedia`, which also renders the seeded `sample_*` drawable names.
 - Location: no GPS and no maps. Location is a text field plus a dropdown of hardcoded barangay/purok names.
 
 ## Code layout
@@ -141,17 +141,17 @@ Fast does not mean messy. The code must be readable, maintainable and clean.
 
 1. **Resident module**
    - Home has bottom-of-screen actions to Report Issue, My Reports, Community Feed, Notifications and Profile (cards or buttons, no BottomNavigationView).
-   - Report Issue: category dropdown, title, description, urgency dropdown, location (barangay dropdown plus street text), simulated photo/video picker. Saves a ticket with status `STATUS_SUBMITTED`, then closes with a Toast.
+   - Report Issue: category dropdown, title, description, urgency dropdown, location (barangay dropdown plus street text), photo/video picker. Saves a ticket with status `STATUS_SUBMITTED`, then closes with a Toast.
    - My Reports: all tickets of the logged-in user, newest first, with a `ChipGroup` filter by status. Tapping opens Ticket Detail showing details, media name, status timeline (the four steps, current one highlighted) and resolution "After" photo when resolved.
    - Community Feed: `TabLayout` with two tabs, Nearby Issues (all other residents' tickets in the same barangay) and Announcements. Nearby issues have an upvote button; one upvote per user per ticket, toggling off removes it (`upvotes` table, counter in `tickets.upvotes`).
    - Profile: edit name, mobile, email, notification switch (`MaterialSwitch`, stored in `users.notify_enabled`), logout.
 2. **Admin and Dispatcher module**
    - Ticket Dashboard: all tickets in a list, filter by category, status and urgency (`ChipGroup`), sort by newest or urgency. Counts per status shown at the top as plain text.
-   - Ticket Detail (admin): change status via dropdown, assign to a department or worker via dropdown (hardcoded departments: Public Works, Sanitation Office, Electrical Team; workers are the users with role worker), add internal notes (bottom sheet, list of notes), attach "After" resolution proof (simulated picker).
+   - Ticket Detail (admin): change status via dropdown, assign to a department or worker via dropdown (hardcoded departments: Public Works, Sanitation Office, Electrical Team; workers are the users with role worker), add internal notes (bottom sheet, list of notes), attach "After" resolution proof (Photo Picker).
    - Assigning a ticket sets `assigned_to` and `assigned_dept`; if status is Submitted it moves to Under Review.
 3. **Field Worker module**
    - Assigned Tasks: only tickets where `assigned_to` is the logged-in worker, not yet Resolved first, with a status filter.
-   - Task Detail: shows ticket info, buttons to set status to In Progress or Resolved. Resolved requires an "After" photo (simulated picker); show an inline error on the field if missing.
+   - Task Detail: shows ticket info, buttons to set status to In Progress or Resolved. Resolved requires an "After" photo (Photo Picker); show an inline error on the field if missing.
 4. **Notifications**
    - Whenever a ticket status changes (by admin or worker), insert a row into `notifications` for the ticket owner and show a Toast "Ticket #id is now <status>" only if the owner is the logged-in user (otherwise they see it in their list on next open).
    - Notifications screen lists the user's notifications newest first, unread in bold, marks all read in `onResume` of the screen after displaying. Respect the `notify_enabled` switch: if off, still store the row but skip the Toast.

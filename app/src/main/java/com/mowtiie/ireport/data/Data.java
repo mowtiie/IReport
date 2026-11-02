@@ -7,9 +7,20 @@ import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
+import android.media.MediaMetadataRetriever;
+import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Patterns;
+import android.webkit.MimeTypeMap;
+import android.widget.ImageView;
 import android.widget.Toast;
+
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.color.MaterialColors;
@@ -18,6 +29,11 @@ import com.mowtiie.ireport.activities.LoginActivity;
 import com.mowtiie.ireport.activities.ResidentHomeActivity;
 import com.mowtiie.ireport.activities.WorkerHomeActivity;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -56,13 +72,14 @@ public class Data {
     public static final String[] BARANGAYS = {"Poblacion", "San Isidro", "Santa Cruz", "Bagong Silang"};
     public static final String LOCATION_SEPARATOR = ", ";
 
-    public static final String[] SAMPLE_MEDIA = {
-            "sample_pothole", "sample_trash", "sample_streetlight", "sample_clip_road"
-    };
-
-    public static final String[] SAMPLE_AFTER_MEDIA = {
-            "sample_after_road", "sample_after_trash", "sample_after_streetlight"
-    };
+    private static final String MEDIA_DIRECTORY = "media";
+    private static final String PHOTO_PREFIX = "photo_";
+    private static final String VIDEO_PREFIX = "video_";
+    private static final String PHOTO_EXTENSION = ".jpg";
+    private static final String DEFAULT_VIDEO_EXTENSION = "mp4";
+    private static final String VIDEO_MIME_PREFIX = "video/";
+    private static final int MAX_IMAGE_SIZE = 1280;
+    private static final int JPEG_QUALITY = 85;
 
     public static final String EXTRA_TICKET_ID = "ticket_id";
 
@@ -445,8 +462,133 @@ public class Data {
         return new SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(new Date());
     }
 
-    public static int drawableFor(Context context, String resourceName) {
+    public static PickVisualMediaRequest imageRequest() {
+        return new PickVisualMediaRequest.Builder()
+                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                .build();
+    }
+
+    public static PickVisualMediaRequest imageAndVideoRequest() {
+        return new PickVisualMediaRequest.Builder()
+                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
+                .build();
+    }
+
+    // The picker only grants temporary access to the Uri, so the file is copied into app storage.
+    public static String saveMedia(Context context, Uri source) {
+        try {
+            String mimeType = context.getContentResolver().getType(source);
+            if (mimeType != null && mimeType.startsWith(VIDEO_MIME_PREFIX)) {
+                return saveVideo(context, source, mimeType);
+            }
+            return saveImage(context, source);
+        } catch (IOException exception) {
+            return null;
+        }
+    }
+
+    public static void showMedia(Context context, ImageView imageView, String mediaName) {
+        int drawableId = drawableFor(context, mediaName);
+        if (drawableId != 0) {
+            imageView.setImageResource(drawableId);
+            return;
+        }
+        File file = mediaFile(context, mediaName);
+        if (mediaName.startsWith(VIDEO_PREFIX)) {
+            imageView.setImageBitmap(videoThumbnail(file));
+            return;
+        }
+        imageView.setImageURI(Uri.fromFile(file));
+    }
+
+    private static int drawableFor(Context context, String resourceName) {
         return context.getResources().getIdentifier(resourceName, "drawable", context.getPackageName());
+    }
+
+    private static File mediaFile(Context context, String mediaName) {
+        File directory = new File(context.getFilesDir(), MEDIA_DIRECTORY);
+        directory.mkdirs();
+        return new File(directory, mediaName);
+    }
+
+    private static String saveVideo(Context context, Uri source, String mimeType) throws IOException {
+        String extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType);
+        String mediaName = VIDEO_PREFIX + System.currentTimeMillis() + "."
+                + (extension == null ? DEFAULT_VIDEO_EXTENSION : extension);
+        try (InputStream input = context.getContentResolver().openInputStream(source);
+             OutputStream output = new FileOutputStream(mediaFile(context, mediaName))) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = input.read(buffer)) > 0) {
+                output.write(buffer, 0, length);
+            }
+        }
+        return mediaName;
+    }
+
+    private static String saveImage(Context context, Uri source) throws IOException {
+        Bitmap bitmap = decodeScaledImage(context, source);
+        int rotation = readRotationDegrees(context, source);
+        if (rotation != 0) {
+            Matrix matrix = new Matrix();
+            matrix.postRotate(rotation);
+            bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        }
+        String mediaName = PHOTO_PREFIX + System.currentTimeMillis() + PHOTO_EXTENSION;
+        try (OutputStream output = new FileOutputStream(mediaFile(context, mediaName))) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output);
+        }
+        return mediaName;
+    }
+
+    private static Bitmap decodeScaledImage(Context context, Uri source) throws IOException {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        try (InputStream input = context.getContentResolver().openInputStream(source)) {
+            BitmapFactory.decodeStream(input, null, options);
+        }
+        int sampleSize = 1;
+        while (Math.max(options.outWidth, options.outHeight) / sampleSize > MAX_IMAGE_SIZE) {
+            sampleSize *= 2;
+        }
+        options.inJustDecodeBounds = false;
+        options.inSampleSize = sampleSize;
+        try (InputStream input = context.getContentResolver().openInputStream(source)) {
+            Bitmap bitmap = BitmapFactory.decodeStream(input, null, options);
+            if (bitmap == null) {
+                throw new IOException("Unreadable image");
+            }
+            return bitmap;
+        }
+    }
+
+    private static int readRotationDegrees(Context context, Uri source) throws IOException {
+        try (InputStream input = context.getContentResolver().openInputStream(source)) {
+            int orientation = new ExifInterface(input).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_90) {
+                return 90;
+            }
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_180) {
+                return 180;
+            }
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_270) {
+                return 270;
+            }
+            return 0;
+        }
+    }
+
+    private static Bitmap videoThumbnail(File file) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(file.getPath());
+            Bitmap frame = retriever.getFrameAtTime(0);
+            retriever.release();
+            return frame;
+        } catch (IOException exception) {
+            return null;
+        }
     }
 
     public static void applyStatusChip(Chip chip, String status) {

@@ -1,17 +1,23 @@
 package com.mowtiie.ireport.activities;
 
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.mowtiie.ireport.data.Data;
 import com.mowtiie.ireport.databinding.ActivityWorkerTaskBinding;
 
 public class WorkerTaskActivity extends AppCompatActivity {
+
+    private final ActivityResultLauncher<PickVisualMediaRequest> afterPhotoPicker =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), this::onAfterPhotoPicked);
 
     private ActivityWorkerTaskBinding binding;
     private String ticketId;
@@ -34,7 +40,7 @@ public class WorkerTaskActivity extends AppCompatActivity {
 
     private void bindListeners() {
         binding.toolbar.setNavigationOnClickListener(v -> finish());
-        binding.etAfterPhoto.setOnClickListener(v -> showAfterPhotoPicker());
+        binding.etAfterPhoto.setOnClickListener(v -> afterPhotoPicker.launch(Data.imageRequest()));
         binding.btnInProgress.setOnClickListener(v -> markInProgress());
         binding.btnResolved.setOnClickListener(v -> attemptMarkResolved());
     }
@@ -60,7 +66,7 @@ public class WorkerTaskActivity extends AppCompatActivity {
         if (media == null) {
             return;
         }
-        binding.ivMedia.setImageResource(Data.drawableFor(this, media));
+        Data.showMedia(this, binding.ivMedia, media);
         binding.tvMediaName.setText(media);
     }
 
@@ -68,19 +74,22 @@ public class WorkerTaskActivity extends AppCompatActivity {
         binding.etAfterPhoto.setText(afterPhoto);
         binding.ivAfterPhoto.setVisibility(afterPhoto == null ? View.GONE : View.VISIBLE);
         if (afterPhoto != null) {
-            binding.ivAfterPhoto.setImageResource(Data.drawableFor(this, afterPhoto));
+            Data.showMedia(this, binding.ivAfterPhoto, afterPhoto);
         }
     }
 
-    private void showAfterPhotoPicker() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("Attach after photo")
-                .setItems(Data.SAMPLE_AFTER_MEDIA, (dialog, which) -> {
-                    binding.tilAfterPhoto.setError(null);
-                    Data.setResolutionMedia(this, ticketId, Data.SAMPLE_AFTER_MEDIA[which]);
-                    showTask();
-                })
-                .show();
+    private void onAfterPhotoPicked(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        String mediaName = Data.saveMedia(this, uri);
+        if (mediaName == null) {
+            binding.tilAfterPhoto.setError("Could not attach that file");
+            return;
+        }
+        binding.tilAfterPhoto.setError(null);
+        Data.setResolutionMedia(this, ticketId, mediaName);
+        showTask();
     }
 
     private void markInProgress() {

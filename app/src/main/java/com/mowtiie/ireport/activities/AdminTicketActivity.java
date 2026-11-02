@@ -1,15 +1,18 @@
 package com.mowtiie.ireport.activities;
 
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.mowtiie.ireport.adapters.GenericAdapter;
 import com.mowtiie.ireport.data.Data;
@@ -20,6 +23,9 @@ import com.mowtiie.ireport.databinding.SheetAddNoteBinding;
 import java.util.ArrayList;
 
 public class AdminTicketActivity extends AppCompatActivity {
+
+    private final ActivityResultLauncher<PickVisualMediaRequest> proofPicker =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), this::onProofPicked);
 
     private ActivityAdminTicketBinding binding;
     private GenericAdapter<String[]> notesAdapter;
@@ -81,7 +87,7 @@ public class AdminTicketActivity extends AppCompatActivity {
     private void bindListeners() {
         binding.toolbar.setNavigationOnClickListener(v -> finish());
         binding.btnAssign.setOnClickListener(v -> attemptAssign());
-        binding.btnAttachProof.setOnClickListener(v -> showProofPicker());
+        binding.btnAttachProof.setOnClickListener(v -> proofPicker.launch(Data.imageRequest()));
         binding.btnAddNote.setOnClickListener(v -> showAddNoteSheet());
     }
 
@@ -113,7 +119,7 @@ public class AdminTicketActivity extends AppCompatActivity {
             binding.tvResolutionName.setText("No after photo attached");
             return;
         }
-        binding.ivResolution.setImageResource(Data.drawableFor(this, resolutionMedia));
+        Data.showMedia(this, binding.ivResolution, resolutionMedia);
         binding.tvResolutionName.setText(resolutionMedia);
     }
 
@@ -148,15 +154,18 @@ public class AdminTicketActivity extends AppCompatActivity {
         Snackbar.make(binding.getRoot(), "Ticket assigned", Snackbar.LENGTH_SHORT).show();
     }
 
-    private void showProofPicker() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("Attach after photo")
-                .setItems(Data.SAMPLE_AFTER_MEDIA, (dialog, which) -> {
-                    Data.setResolutionMedia(this, ticketId, Data.SAMPLE_AFTER_MEDIA[which]);
-                    showTicket(Data.loadTicket(this, ticketId));
-                    Snackbar.make(binding.getRoot(), "After photo attached", Snackbar.LENGTH_SHORT).show();
-                })
-                .show();
+    private void onProofPicked(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        String mediaName = Data.saveMedia(this, uri);
+        if (mediaName == null) {
+            Snackbar.make(binding.getRoot(), "Could not attach that file", Snackbar.LENGTH_SHORT).show();
+            return;
+        }
+        Data.setResolutionMedia(this, ticketId, mediaName);
+        showTicket(Data.loadTicket(this, ticketId));
+        Snackbar.make(binding.getRoot(), "After photo attached", Snackbar.LENGTH_SHORT).show();
     }
 
     private void showAddNoteSheet() {

@@ -84,7 +84,7 @@ public class TicketDetailActivity extends AppCompatActivity {
         if (media == null) {
             return;
         }
-        binding.ivMedia.setImageResource(Data.drawableFor(this, media));
+        Data.showMedia(this, binding.ivMedia, media);
         binding.tvMediaName.setText(media);
     }
 
@@ -93,7 +93,7 @@ public class TicketDetailActivity extends AppCompatActivity {
         if (resolutionMedia == null) {
             return;
         }
-        binding.ivResolution.setImageResource(Data.drawableFor(this, resolutionMedia));
+        Data.showMedia(this, binding.ivResolution, resolutionMedia);
         binding.tvResolutionName.setText(resolutionMedia);
     }
 }

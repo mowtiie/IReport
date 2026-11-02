@@ -1,19 +1,27 @@
 package com.mowtiie.ireport.activities;
 
+import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.snackbar.Snackbar;
 import com.mowtiie.ireport.data.Data;
 import com.mowtiie.ireport.databinding.ActivityReportIssueBinding;
 
 public class ReportIssueActivity extends AppCompatActivity {
 
     private static final int MIN_DESCRIPTION_LENGTH = 10;
+
+    private final ActivityResultLauncher<PickVisualMediaRequest> mediaPicker =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), this::onMediaPicked);
 
     private ActivityReportIssueBinding binding;
     private String selectedCategory;
@@ -52,18 +60,23 @@ public class ReportIssueActivity extends AppCompatActivity {
 
     private void bindListeners() {
         binding.toolbar.setNavigationOnClickListener(v -> finish());
-        binding.btnAttachMedia.setOnClickListener(v -> showMediaPicker());
+        binding.btnAttachMedia.setOnClickListener(v -> mediaPicker.launch(Data.imageAndVideoRequest()));
         binding.btnSubmit.setOnClickListener(v -> attemptSubmit());
     }
 
-    private void showMediaPicker() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("Attach photo or video")
-                .setItems(Data.SAMPLE_MEDIA, (dialog, which) -> {
-                    selectedMedia = Data.SAMPLE_MEDIA[which];
-                    binding.tvMediaName.setText(selectedMedia);
-                })
-                .show();
+    private void onMediaPicked(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        String mediaName = Data.saveMedia(this, uri);
+        if (mediaName == null) {
+            Snackbar.make(binding.getRoot(), "Could not attach that file", Snackbar.LENGTH_SHORT).show();
+            return;
+        }
+        selectedMedia = mediaName;
+        binding.tvMediaName.setText(mediaName);
+        binding.ivMediaPreview.setVisibility(View.VISIBLE);
+        Data.showMedia(this, binding.ivMediaPreview, mediaName);
     }
 
     private void attemptSubmit() {

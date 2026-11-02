@@ -138,6 +138,14 @@
                 android:text="No media attached"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <ImageView
+                android:id="@+id/ivMediaPreview"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_marginTop="8dp"
+                android:contentDescription="Preview of the attached photo or video"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 
